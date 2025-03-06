@@ -11,6 +11,7 @@ import java.time.LocalDate;
 @AllArgsConstructor @NoArgsConstructor
 @Getter @Setter @ToString @Builder
 public class ClientRequest {
+    private String id ;
     @NotBlank(message = "Le nom est obligatoire")
     private String nom ;
     @NotBlank(message = "Le prenom est obligatoire")

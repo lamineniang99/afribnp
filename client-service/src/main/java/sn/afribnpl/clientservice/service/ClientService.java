@@ -1,10 +1,12 @@
 package sn.afribnpl.clientservice.service;
 
+import jakarta.persistence.EntityNotFoundException;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import sn.afribnpl.clientservice.dao.ClientRepository;
+import sn.afribnpl.clientservice.dto.ClientDto;
 import sn.afribnpl.clientservice.dto.ClientRequest;
 import sn.afribnpl.clientservice.enitity.Client;
 import sn.afribnpl.clientservice.exceptions.DuplicateEmailException;
@@ -43,7 +45,23 @@ public class ClientService implements IClientService {
 
         log.info("-------------creation du client");
 
+        Client saved = clientRepository.save(client);
+        log.info("le client {}  a été creé avec success", saved.toString());
+
         return Optional.of(clientMapper.toClientRequest(client));
+    }
+
+    @Override
+    public Optional<ClientDto> getClientById(String clientId) {
+        log.info("recuperation d'un client grace a son id ");
+        Optional<Client> client = clientRepository.findById(clientId);
+        if (client.isPresent()) {
+            return Optional.of(clientMapper.toClientDto(client.get())) ;
+        }else {
+            log.info("L'id {} n'existe pas", clientId);
+            throw new EntityNotFoundException("ce client demandé n'existe pas ");
+        }
+
     }
 
     /**
