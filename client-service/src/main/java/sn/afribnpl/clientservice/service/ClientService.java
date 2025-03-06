@@ -1,21 +1,58 @@
 package sn.afribnpl.clientservice.service;
 
 import lombok.AllArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import sn.afribnpl.clientservice.dao.ClientRepository;
 import sn.afribnpl.clientservice.dto.ClientRequest;
+import sn.afribnpl.clientservice.enitity.Client;
+import sn.afribnpl.clientservice.exceptions.DuplicateEmailException;
+import sn.afribnpl.clientservice.exceptions.EmailNotValidException;
+import sn.afribnpl.clientservice.mapper.ClientMapper;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @AllArgsConstructor
 public class ClientService implements IClientService {
+    private static final Logger log = LoggerFactory.getLogger(ClientService.class);
     private ClientRepository clientRepository;
+    private ClientMapper clientMapper;
+    private S3Service s3Service;
 
 
     @Override
     public Optional<ClientRequest> createClient(ClientRequest request) {
+        Optional<Client> byEmail = clientRepository.findByEmail(request.getEmail());
+        if (byEmail.isPresent()) {
+            throw new DuplicateEmailException("L'email "+request.getEmail()+" existe deja veuillez vous connecter directement");
+        }
 
-        return null;
+        if (! isEmailValid(request.getEmail())) {
+            throw new EmailNotValidException("L'email "+request.getEmail()+" est invalide");
+        }
+
+        Client client = clientMapper.toClient(request);
+        client.setId(UUID.randomUUID().toString());
+
+        String urlCni = s3Service.uploadFile(client.getId(), request.getCni());
+
+        client.setUrlCni(urlCni);
+
+        log.info("-------------creation du client");
+
+        return Optional.of(clientMapper.toClientRequest(client));
+    }
+
+    /**
+     * Verification de la validité de l'amail
+     * @param email
+     * @return
+     */
+    private boolean isEmailValid(String email) {
+        String emailRegex = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$";
+        return email.matches(emailRegex);
     }
 }

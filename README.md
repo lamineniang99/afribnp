@@ -18,7 +18,7 @@ Avant de commencer, assurez-vous d'avoir les outils suivants installés :
 
 ### Variables d'environnement
 
-Ce microservice utilise Amazon S3 pour stocker les fichiers d'identité des clients. Vous devez configurer un fichier de propriétés pour les informations d'identification AWS.
+Le microservice client-service utilise Amazon S3 pour stocker les fichiers d'identité des clients. Vous devez configurer un fichier de propriétés pour les informations d'identification AWS.
 
 #### Création du fichier `aws-credentials.properties`
 

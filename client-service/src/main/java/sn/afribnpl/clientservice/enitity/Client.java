@@ -28,5 +28,5 @@ public class Client {
     @Column( nullable = false)
     private LocalDate birthday ;
     private String adresse ;
-    private String cni ;
+    private String urlCni ;
 }

@@ -1,4 +1,12 @@
 package sn.afribnpl.clientservice.mapper;
 
-public class ClientMapper {
+
+import org.mapstruct.Mapper;
+import sn.afribnpl.clientservice.dto.ClientRequest;
+import sn.afribnpl.clientservice.enitity.Client;
+
+@Mapper
+public interface ClientMapper {
+    Client toClient(ClientRequest clientRequest);
+    ClientRequest toClientRequest(Client client);
 }

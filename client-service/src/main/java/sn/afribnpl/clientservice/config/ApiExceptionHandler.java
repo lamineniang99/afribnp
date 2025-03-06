@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import sn.afribnpl.clientservice.exceptions.DuplicateEmailException;
 
 import java.util.Date;
 import java.util.stream.Collectors;
@@ -80,6 +81,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(SecurityException.class)
     public ResponseEntity<ApiResponseException> handleSecurityException(SecurityException ex) {
         log.error("Erreur de sécurité : {}", ex.getMessage(), ex);
+        return new ResponseEntity<>(createApiResponse(ex.getMessage(), HttpStatus.BAD_REQUEST), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(DuplicateEmailException.class)
+    public ResponseEntity<ApiResponseException> handleDuplicateEmailException(SecurityException ex) {
+        log.error("Duplication d'email : {}", ex.getMessage(), ex);
         return new ResponseEntity<>(createApiResponse(ex.getMessage(), HttpStatus.BAD_REQUEST), HttpStatus.BAD_REQUEST);
     }
 
