@@ -4,6 +4,8 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.stereotype.Service;
 import sn.afribnpl.clientservice.dao.ClientRepository;
 import sn.afribnpl.clientservice.dto.ClientDto;
@@ -23,6 +25,8 @@ public class ClientService implements IClientService {
     private ClientRepository clientRepository;
     private ClientMapper clientMapper;
     private S3Service s3Service;
+    @Autowired
+    private StreamBridge streamBridge ;
 
 
     @Override
@@ -47,6 +51,9 @@ public class ClientService implements IClientService {
 
         Client saved = clientRepository.save(client);
         log.info("le client {}  a été creé avec success", saved.toString());
+        log.info("envoie des données vers kafka...............");
+        streamBridge.send("cni", saved) ;
+        log.info("Données envoyer a kafka");
 
         return Optional.of(clientMapper.toClientRequest(client));
     }
