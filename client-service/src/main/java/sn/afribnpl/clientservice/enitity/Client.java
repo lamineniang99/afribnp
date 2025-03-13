@@ -29,4 +29,6 @@ public class Client {
     private LocalDate birthday ;
     private String adresse ;
     private String urlCni ;
+    private boolean cniVerified = false ;
+    private boolean emailVerified = false;
 }
