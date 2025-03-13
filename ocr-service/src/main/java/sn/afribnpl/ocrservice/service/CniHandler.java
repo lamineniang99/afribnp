@@ -1,9 +1,15 @@
 package sn.afribnpl.ocrservice.service;
 
+import net.sourceforge.tess4j.Tesseract;
+import net.sourceforge.tess4j.TesseractException;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import sn.afribnpl.ocrservice.config.AwsCredentialsLoader;
@@ -19,7 +25,10 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.function.Consumer;
 
@@ -27,20 +36,35 @@ import java.util.function.Consumer;
 public class CniHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CniHandler.class);
+    @Autowired
+    private StreamBridge streamBridge ;
 
     @Bean
     public Consumer<Client> cniConsumer() {
         return (cni) -> {
-            log.info("*******************les infos recues sur le top cni pour la verification");
+            log.info("*******************les infos recues sur le topic cni depuis le client service");
             log.info("Nom : {} Prenom : {} Birthday : {}", cni.getNom(), cni.getPrenom(), cni.getBirthday());
             log.info("*******************recuperation du fichier sur le bean ");
 
             byte[] bytes = downloadCniFile(cni.getUrlCni());
             if (bytes != null) {
-                log.info("***********fichier telecharger avec succes ! ");
+                log.info("***********fichier telecharger depuis S3 avec succes ! ");
             }
             try {
-                log.info("---------Le nom recuperer sur le document : {} ", extractNomFromPdf(bytes));
+                List<BufferedImage> bufferedImages = extractImagesFromPdf(bytes);
+                String text = extractTextFromImages(bufferedImages) ;
+                log.info("//////////////Texte extrait dans la liste des images : {} ", text);
+                log.info("------------------extraction du prenom dans le NAS ...");
+                String prenom = extractPreNomFromText(text) ;
+                String nom = extractNomFromText(text) ;
+
+                if (nom.equals(cni.getNom()) && prenom.equals(cni.getPrenom())) {
+                    log.info("les infos concernant nom et prenom sont conforme");
+                    log.info("preparation de publication sur le broker");
+                    cni.setCniVerified(true);
+                    streamBridge.send("cni-resp", cni) ;
+                }
+
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -48,29 +72,22 @@ public class CniHandler {
     }
 
 
-    private String extractNomFromPdf(byte[] cniFile) throws IOException {
-        // Utiliser PDFBox pour extraire le nom du PDF
-        // Exemple :
-        PDDocument document = PDDocument.load(cniFile);
-        PDFTextStripper pdfStripper = new PDFTextStripper();
-        String text = pdfStripper.getText(document);
-        // Extraire le nom du texte (cela dépend de la structure du PDF)
-        return extractNomFromText(text);
-    }
 
-    private String extractNomFromText(String text) {
+
+    private String extractPreNomFromText(String text) {
         // Supposons que le nom est précédé d'un libellé comme "Nom :" ou "Nom complet :"
         String[] lines = text.split("\n"); // Divise le texte en lignes
+        log.info("le nombre de ligne recuperer : {}", lines.length);
 
         for (String line : lines) {
-            // Recherche le libellé "Nom :" ou "Nom complet :"
-            log.info("----------------------- {}", line);
-            if (line.contains("Mohamadou") || line.contains("Lamine")) {
+
+            if (line.contains("Prénom") || line.contains("First Name")) {
                 // Extrait le nom après le libellé
-                String[] parts = line.split(" ");
+                String[] parts = line.split(":");
                 log.info("------- la ligne concerné {} ", line);
-                if (parts.length > 1) {
-                    return parts[3].trim(); // Retourne le nom en supprimant les espaces inutiles
+                if (parts.length > 0) {
+                    log.info("Le prenom recupére dans le NAS {}", parts[1].trim());
+                    return parts[1].trim(); // Retourne le nom en supprimant les espaces inutiles
                 }
             }
         }
@@ -79,6 +96,28 @@ public class CniHandler {
         return null;
 
     }
+
+    private String extractNomFromText(String text) {
+        String[] lines = text.split("\n"); // Divise le texte en lignes
+
+        for (String line : lines) {
+
+            if (line.contains("Nom(s) de Famille") || line.contains("Family Name(s)")) {
+                // Extrait le nom après le libellé
+                String[] parts = line.split(":");
+                log.info("------- la ligne concerné {} ", line);
+                if (parts.length > 0) {
+                    log.info("Le nom recupére dans le NAS {}", parts[1].trim());
+                    return parts[1].trim(); // Retourne le nom en supprimant les espaces inutiles
+                }
+            }
+        }
+
+        // Si le nom n'est pas trouvé, retourne null
+        return null;
+
+    }
+
 
     public byte[] downloadCniFile(String urlCni) {
         // Chargez les credentials depuis le fichier
@@ -134,5 +173,41 @@ public class CniHandler {
             return urlCni.substring(prefix.length());
         }
         throw new IllegalArgumentException("URL S3 invalide : " + urlCni);
+    }
+
+    public List<BufferedImage> extractImagesFromPdf(byte[] pdfBytes) throws IOException {
+        List<BufferedImage> images = new ArrayList<>();
+
+        try (PDDocument document = PDDocument.load(pdfBytes)) {
+            PDFRenderer pdfRenderer = new PDFRenderer(document);
+
+            // Parcourir chaque page du PDF
+            for (int pageIndex = 0; pageIndex < document.getNumberOfPages(); pageIndex++) {
+                // Rendre la page en image
+                BufferedImage image = pdfRenderer.renderImageWithDPI(pageIndex, 300, ImageType.RGB);
+                images.add(image);
+            }
+        }
+
+        return images;
+    }
+
+    public String extractTextFromImages(List<BufferedImage> images) {
+        Tesseract tesseract = new Tesseract();
+        tesseract.setDatapath("C:\\Program Files\\Tesseract-OCR\\tessdata"); // Chemin vers le dossier tessdata
+        tesseract.setLanguage("fra"); // Langue française
+
+        StringBuilder extractedText = new StringBuilder();
+
+        for (BufferedImage image : images) {
+            try {
+                String text = tesseract.doOCR(image);
+                extractedText.append(text).append("\n");
+            } catch (TesseractException e) {
+                System.err.println("Erreur lors de l'extraction du texte de l'image : " + e.getMessage());
+            }
+        }
+
+        return extractedText.toString();
     }
 }
